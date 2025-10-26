@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import org.apache.commons.io.file.PathUtils;
@@ -30,6 +32,9 @@ public class PluginIntegTest {
 
     private static final Path BASE_DIR = Path.of(System.getProperty("buildDir"), "integTest");
     private static final Path WORKING_DIR = Path.of(System.getProperty("projectDir"), "testkit");
+    private static final Pattern GREETING_PATTERN =
+            Pattern.compile("BUILDING testProject - Gradle: \\d+\\.\\d+(\\.\\d+)?, Kotlin: \\d+\\.\\d+\\.\\d+, "
+                            + "Java: \\d+\\.\\d+\\.\\d+, OS: \\w+, Host: \\w+");
 
     static {
         try {
@@ -57,15 +62,39 @@ public class PluginIntegTest {
     @ParameterizedTest
     @MethodSource("gradleVersionProvider")
     public void testShowGreeting(final String gradleVersion) throws IOException {
-        copyProject("project");
+        copyProject();
 
         final BuildResult result = createGradleRunner(gradleVersion).build();
-        verifyBuild(result);
+        final String output = result.getOutput();
+        assertThat(output).containsPattern(GREETING_PATTERN);
+
+        final BuildTask helloTask = result.task(":hello");
+        assertThat(helloTask).isNotNull();
+        assertThat(helloTask.getOutcome()).as(result.getOutput()).isEqualTo(SUCCESS);
+
     }
 
-    @SuppressWarnings("SameParameterValue")
-    private void copyProject(final String projectName) throws IOException {
-        final URL projectUrl = getClass().getResource("/" + projectName);
+    @ParameterizedTest
+    @MethodSource("gradleVersionProvider")
+    public void testShowGreetingWithCause(final String gradleVersion) throws IOException {
+        copyProject();
+
+        final String cause = "A cause";
+        final GradleRunner runner = createGradleRunner(gradleVersion);
+        runner.withEnvironment(Map.of("CTHING_CI_BUILD_CAUSE", cause));
+        final BuildResult result = runner.build();
+        final String output = result.getOutput();
+        assertThat(output).containsPattern(GREETING_PATTERN);
+        assertThat(output).contains("BUILD CAUSE: " + cause);
+
+        final BuildTask helloTask = result.task(":hello");
+        assertThat(helloTask).isNotNull();
+        assertThat(helloTask.getOutcome()).as(result.getOutput()).isEqualTo(SUCCESS);
+
+    }
+
+    private void copyProject() throws IOException {
+        final URL projectUrl = getClass().getResource("/project");
         assertThat(projectUrl).isNotNull();
         PathUtils.copyDirectory(Path.of(projectUrl.getPath()), this.projectDir);
     }
@@ -77,11 +106,5 @@ public class PluginIntegTest {
                            .withArguments("hello")
                            .withPluginClasspath()
                            .withGradleVersion(gradleVersion);
-    }
-
-    private void verifyBuild(final BuildResult result) {
-        final BuildTask helloTask = result.task(":hello");
-        assertThat(helloTask).isNotNull();
-        assertThat(helloTask.getOutcome()).as(result.getOutput()).isEqualTo(SUCCESS);
     }
 }
