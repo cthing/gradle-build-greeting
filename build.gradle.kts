@@ -30,7 +30,7 @@ plugins {
     alias(libs.plugins.versions)
 }
 
-version = ProjectVersion("1.0.0", BuildType.snapshot)
+version = ProjectVersion("1.0.0", BuildType.release)
 group = "org.cthing"
 description = "A Gradle plugin that shows build environment information at the start of a Gradle run."
 
